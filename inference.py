@@ -7,7 +7,7 @@ from openai import OpenAI
 # Mandatory Hackathon Variables
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
-HF_TOKEN = os.getenv("HF_TOKEN", "mock-token")
+HF_TOKEN = os.getenv("HF_TOKEN")
 ENV_URL = os.getenv("ENV_URL", "http://localhost:7860")
 
 # Scoring Thresholds (Customizable)
@@ -48,21 +48,9 @@ def log_end(task_id, success, steps, score, rewards):
     }
     print(f"[END] {json.dumps(log_data)}", flush=True)
 
-class MockChoices:
-    def __init__(self, content):
-        self.message = type("msg", (), {"content": content})()
-
-class MockLLM:
-    def __init__(self):
-        self.chat = type("chat", (), {"completions": type("comps", (), {"create": self._mock_create})()})
-    def _mock_create(self, **kwargs):
-        return type("res", (), {"choices": [MockChoices('{"action_type": "query_logs", "service": "auth-service"}')]})()
-
 def run_inference():
-    if HF_TOKEN == "mock-token":
-        llm = MockLLM()
-    else:
-        llm = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+    # Strictly using OpenAI client as required by hackathon rules
+    llm = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
     
     tasks = ["task_easy", "task_medium", "task_hard"]
     
