@@ -1,3 +1,14 @@
+---
+title: SRE Incident Response OpenEnv
+emoji: 🚨
+colorFrom: red
+colorTo: blue
+sdk: docker
+pinned: false
+app_port: 7860
+tags: [openenv, reinforcement-learning, sre, agentic-ai]
+---
+
 # SRE Incident Response Environment
 
 A production-grade [OpenEnv](https://github.com/openenv-ai/openenv) environment for the Meta PyTorch Hackathon (Round 1).
