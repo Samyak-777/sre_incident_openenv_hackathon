@@ -14,7 +14,7 @@ class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
         super().__init__()
         self._max_steps = 15
         
-    def reset(self, task_id: str) -> SREObservation:
+    def reset(self, task_id: str = "task_easy") -> SREObservation:
         """Called to start a new episode for a given task"""
         if task_id not in INCIDENTS:
             raise ValueError(f"Unknown task_id: {task_id}")
