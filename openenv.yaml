@@ -1,0 +1,17 @@
+name: "sre_incident_env"
+version: "0.1.0"
+description: "Simulates SRE on-call incidents for agent evaluation."
+author:
+  name: "Samyak Borkar"
+  email: "samyakborkar65@gmail.com"
+tasks:
+  - id: "task_easy"
+    difficulty: "easy"
+  - id: "task_medium"
+    difficulty: "medium"
+  - id: "task_hard"
+    difficulty: "hard"
+docker:
+  build_context: "."
+  dockerfile: "Dockerfile"
+  port: 7860

@@ -1,0 +1,21 @@
+[project]
+name = "sre_incident_env_hackathon"
+version = "0.1.0"
+description = "SRE Incident Response OpenEnv for Meta PyTorch Hackathon"
+requires-python = ">=3.10"
+authors = [
+    {name = "Samyak Borkar", email = "samyakborkar65@gmail.com"}
+]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "openenv-core>=0.2.0"
+]
+
+[project.scripts]
+server = "server.app:main"
+
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"

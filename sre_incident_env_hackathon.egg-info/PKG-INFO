@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: sre_incident_env_hackathon
+Version: 0.1.0
+Summary: SRE Incident Response OpenEnv for Meta PyTorch Hackathon
+Author-email: Samyak Borkar <samyakborkar65@gmail.com>
+Requires-Python: >=3.10
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: pydantic
+Requires-Dist: openenv-core>=0.2.0
