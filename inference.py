@@ -110,10 +110,8 @@ def run_inference():
             if done:
                 break
         
-        # Scoring calculation from the sample
-        total_reward_sum = sum(rewards)
-        # Normalize to [0, 1] - Assuming max possible reward is around 1.0 (clamped)
-        score = min(max(total_reward_sum, 0.0), 1.0)
+        # Scoring calculation - Strictly (0, 1) range enforced by environment
+        score = sum(rewards)
         success = score >= SUCCESS_SCORE_THRESHOLD
         
         log_end(task_id=task_id, success=success, steps=steps_taken, score=score, rewards=rewards)

@@ -129,9 +129,27 @@ class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
             done = True
             action_feedback = "On-call shift ended (max steps reached). Episode terminated."
         
+        # Strictly (0, 1) range enforcement
+        # Initial base reward of 0.01 added on first step
+        actual_step_reward = reward
+        if self._state.step_count == 1:
+            actual_step_reward += 0.01 # Base participation reward
+            
+        # Cumulative safety - ensure total never exceeds 0.99
+        new_total = self._state.cumulative_reward + actual_step_reward
+        if new_total >= 1.0:
+            actual_step_reward = 0.99 - self._state.cumulative_reward
+            self._state.cumulative_reward = 0.99
+        elif new_total <= 0.0:
+            # Although penalties exist, we never drop below a tiny positive floor 
+            actual_step_reward = 0.001 - self._state.cumulative_reward
+            self._state.cumulative_reward = 0.001
+        else:
+            self._state.cumulative_reward = new_total
+
         obs.action_feedback = action_feedback
         obs.done = done
-        obs.reward = reward 
+        obs.reward = actual_step_reward 
         
         return obs
         

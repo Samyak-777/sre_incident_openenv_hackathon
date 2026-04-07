@@ -82,6 +82,7 @@ class SREState(State):
     stakeholder_updates: List[str] = Field(default_factory=list)
     postmortem_submitted: Optional[Dict[str, str]] = None
     score_breakdown: Dict[str, float] = Field(default_factory=dict)
+    cumulative_reward: float = 0.01
     
     # To prevent loops
     action_history: List[str] = Field(default_factory=list)
