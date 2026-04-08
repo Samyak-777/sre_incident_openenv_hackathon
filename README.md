@@ -13,14 +13,14 @@ tags: [openenv, reinforcement-learning, sre, agentic-ai]
 
 A production-grade [OpenEnv](https://github.com/openenv-ai/openenv) environment for the Meta PyTorch Hackathon (Round 1).
 
-## 🚀 Motivation & Real-World Utility
+## Motivation & Real-World Utility
 Site Reliability Engineers (SREs) are the backbone of modern tech companies, but training them is expensive and reactive. This environment models a genuine, high-stakes SRE on-call workflow: **Alert → Investigation → Remediation → Documentation**.
 Unlike toy environments, this requires an agent to:
 1.  **Parse Multi-modal Telemetry**: Correlate structured JSON logs with metric time-series (CPU, latency, etc.).
 2.  **Follow Runbooks**: Execute deterministic procedures from a markdown registry.
 3.  **Handle Non-Standard Outages**: Identify when a runbook fails and escalate to the correct specialized team (e.g., Security for DDoS).
 
-## 🧠 Environment Design
+## Environment Design
 ### Observation Space
 The agent receives a rich `SREObservation` containing:
 -   **Alert Payload**: Severity, triggered threshold, and service identity.
@@ -39,7 +39,7 @@ The agent can perform 7 distinct `SREAction` types:
 6.  `draft_status_update`: Communicate with stakeholders.
 7.  `write_postmortem`: Finalize the Root Cause Analysis (RCA).
 
-## 🎯 Task Success & Graders
+## Task Success & Graders
 We provide three deterministic tasks:
 -   **Easy (`task_easy`)**: `auth-service` degradation. Remediation via standard scaling runbook.
 -   **Medium (`task_medium`)**: Cascading failure in `payment-api` due to database locks. Requires multi-service investigation.
@@ -51,7 +51,7 @@ Graders score performance on a **0.0 to 1.0** scale based on:
 -   Adherence to required remediation steps.
 -   Quality and completeness of the final postmortem.
 
-## 🛠 Setup and Usage
+## Setup and Usage
 ### Local Development
 ```bash
 # Install dependencies

@@ -41,6 +41,7 @@ class SREObservation(Observation):
     metrics: Dict[str, MetricSnapshot] = Field(default_factory=dict)
     dependency_graph: Dict[str, Dict[str, List[str]]] = Field(default_factory=dict)
     available_runbooks: List[RunbookMetadata] = Field(default_factory=list)
+    reward: float = 0.01
     
     # Context-dependent fields returned after specific actions
     fetched_runbook_content: Optional[str] = None

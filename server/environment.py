@@ -35,7 +35,8 @@ class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
             metrics={s: MetricSnapshot(**m) for s, m in incident["metrics"].items()},
             dependency_graph=incident["dependency_graph"],
             available_runbooks=[RunbookMetadata(**rm) for rm in RUNBOOK_METADATA],
-            action_feedback="You have been paged. Investigate the alert."
+            action_feedback="You have been paged. Investigate the alert.",
+            reward=0.01 # Initial floor reward
         )
         return obs
 
@@ -131,7 +132,9 @@ class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
         
         # Strictly (0, 1) range enforcement
         # Initial base reward of 0.01 added on first step
-        actual_step_reward = reward
+        # Every step also gets a 0.001 'participation epsilon' to ensure reward > 0
+        actual_step_reward = reward + 0.001 
+        
         if self._state.step_count == 1:
             actual_step_reward += 0.01 # Base participation reward
             
