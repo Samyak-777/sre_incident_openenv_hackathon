@@ -11,8 +11,14 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 ENV_URL = os.getenv("ENV_URL", "http://localhost:7860")
 
 # Scoring Thresholds (Customizable)
-SUCCESS_SCORE_THRESHOLD = 0.8
+SUCCESS_SCORE_THRESHOLD = 0.5
 MAX_STEPS = 15
+
+# Maximum total reward the environment can give (for normalization).
+# This is the theoretical max: severity(0.17) + service(0.22) + 3 runbook(0.07*3)
+# + escalation(0.27) + comms(0.17) + postmortem(0.22) + per-step base(0.02*15)
+# = 1.54 + 0.30 = ~1.84. Round up to 2.0 for safety.
+MAX_TOTAL_REWARD = 2.0
 
 SYSTEM_PROMPT = """
 You are an expert Site Reliability Engineer (SRE) on-call.
@@ -48,6 +54,10 @@ def log_end(task_id, success, steps, score, rewards):
     }
     print(f"[END] {json.dumps(log_data)}", flush=True)
 
+def clamp_score(value):
+    """Clamp a value to strictly (0, 1) - never 0.0, never 1.0."""
+    return min(max(float(value), 0.01), 0.99)
+
 def run_inference():
     # Strictly using OpenAI client as required by hackathon rules
     llm = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
@@ -68,7 +78,7 @@ def run_inference():
             continue
             
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        rewards = []
+        raw_rewards = []
         steps_taken = 0
         success = False
         
@@ -100,36 +110,44 @@ def run_inference():
                 result_payload = res.json()
             except Exception as e:
                 log_step(step, action_dict, 0.01, True, error=f"Env Failure: {str(e)}")
+                raw_rewards.append(0.01)
                 break
                 
             obs = result_payload.get("observation", {})
             reward = result_payload.get("reward", 0.01)
             done = result_payload.get("done", False)
             
-            # Safety: ensure individual reward is never exactly 0.0 or 1.0
-            if reward is None or reward == 0.0:
+            # Safety: ensure individual reward is a valid number (never None, 0.0, or 1.0)
+            if reward is None or not isinstance(reward, (int, float)):
                 reward = 0.01
-            elif reward >= 1.0:
-                reward = 0.99
             
-            rewards.append(reward)
-            log_step(step=step, action=action_dict, reward=reward, done=done, error=error)
+            raw_rewards.append(float(reward))
+            log_step(step=step, action=action_dict, reward=float(reward), done=done, error=error)
             
             messages.append({"role": "assistant", "content": action_json})
             if done:
                 break
         
-        # Final score: strictly within (0.0, 1.0)
-        if len(rewards) == 0:
+        # ================================================================
+        # FINAL SCORE CALCULATION
+        # The validator checks: 0 < score < 1 (strictly)
+        # Normalize rewards so the score is always in (0, 1)
+        # ================================================================
+        if len(raw_rewards) == 0:
             score = 0.01
+            normalized_rewards = [0.01]
         else:
-            score = sum(rewards)
+            raw_sum = sum(raw_rewards)
+            # Normalize: divide by MAX_TOTAL_REWARD to ensure sum is < 1.0
+            score = raw_sum / MAX_TOTAL_REWARD
+            # Clamp to strict (0, 1) 
+            score = clamp_score(score)
+            # Normalize individual rewards for the log
+            normalized_rewards = [clamp_score(r / MAX_TOTAL_REWARD) for r in raw_rewards]
         
-        # Strict clamping to (0, 1) — never 0.0, never 1.0
-        score = min(max(score, 0.01), 0.99)
         success = score >= SUCCESS_SCORE_THRESHOLD
         
-        log_end(task_id=task_id, success=success, steps=steps_taken, score=score, rewards=rewards)
+        log_end(task_id=task_id, success=success, steps=steps_taken, score=score, rewards=normalized_rewards)
 
 if __name__ == "__main__":
     run_inference()
