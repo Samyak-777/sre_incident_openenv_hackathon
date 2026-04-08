@@ -62,11 +62,13 @@ def run_inference():
             response.raise_for_status()
             obs = response.json()
         except Exception as e:
-            log_end(task_id, False, 0, 0.0, [])
+            # Strictly (0, 1) range: log 0.01 on failure instead of 0.0
+            log_end(task_id=task_id, success=False, steps=0, score=0.01, rewards=[0.01])
             continue
             
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        rewards = []
+        # Initialize with participation floor to guarantee score > 0.0
+        rewards = [0.01] 
         steps_taken = 0
         success = False
         
@@ -96,11 +98,11 @@ def run_inference():
                 res.raise_for_status()
                 result_payload = res.json()
             except Exception as e:
-                log_step(step, action_dict, 0.0, True, error=f"Env Failure: {str(e)}")
+                log_step(step, action_dict, 0.01, True, error=f"Env Failure: {str(e)}")
                 break
                 
             obs = result_payload.get("observation", {})
-            reward = result_payload.get("reward", 0.0)
+            reward = result_payload.get("reward", 0.01)
             done = result_payload.get("done", False)
             
             rewards.append(reward)
@@ -110,8 +112,9 @@ def run_inference():
             if done:
                 break
         
-        # Scoring calculation - Strictly (0, 1) range enforced by environment
-        score = sum(rewards)
+        # Scoring calculation - Strictly (0, 1) range enforced (0.01 - 0.99)
+        total_reward_sum = sum(rewards)
+        score = min(max(total_reward_sum, 0.01), 0.99)
         success = score >= SUCCESS_SCORE_THRESHOLD
         
         log_end(task_id=task_id, success=success, steps=steps_taken, score=score, rewards=rewards)

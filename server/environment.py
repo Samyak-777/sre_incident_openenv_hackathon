@@ -142,8 +142,8 @@ class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
             self._state.cumulative_reward = 0.99
         elif new_total <= 0.0:
             # Although penalties exist, we never drop below a tiny positive floor 
-            actual_step_reward = 0.001 - self._state.cumulative_reward
-            self._state.cumulative_reward = 0.001
+            actual_step_reward = 0.01 - self._state.cumulative_reward
+            self._state.cumulative_reward = 0.01
         else:
             self._state.cumulative_reward = new_total
 
