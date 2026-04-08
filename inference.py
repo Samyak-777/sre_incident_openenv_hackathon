@@ -60,15 +60,15 @@ def run_inference():
         try:
             response = requests.post(f"{ENV_URL}/reset", json={"task_id": task_id})
             response.raise_for_status()
-            obs = response.json()
+            reset_payload = response.json()
+            obs = reset_payload.get("observation", reset_payload)
         except Exception as e:
             # Strictly (0, 1) range: log 0.01 on failure instead of 0.0
             log_end(task_id=task_id, success=False, steps=0, score=0.01, rewards=[0.01])
             continue
             
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        # Initialize with participation floor to guarantee score > 0.0
-        rewards = [0.01] 
+        rewards = []
         steps_taken = 0
         success = False
         
@@ -93,8 +93,9 @@ def run_inference():
                 error = str(e)
                 
             # Environment Interaction
+            # IMPORTANT: OpenEnv StepRequest wraps action in {"action": {...}}
             try:
-                res = requests.post(f"{ENV_URL}/step", json=action_dict)
+                res = requests.post(f"{ENV_URL}/step", json={"action": action_dict})
                 res.raise_for_status()
                 result_payload = res.json()
             except Exception as e:
@@ -105,6 +106,12 @@ def run_inference():
             reward = result_payload.get("reward", 0.01)
             done = result_payload.get("done", False)
             
+            # Safety: ensure individual reward is never exactly 0.0 or 1.0
+            if reward is None or reward == 0.0:
+                reward = 0.01
+            elif reward >= 1.0:
+                reward = 0.99
+            
             rewards.append(reward)
             log_step(step=step, action=action_dict, reward=reward, done=done, error=error)
             
@@ -112,9 +119,14 @@ def run_inference():
             if done:
                 break
         
-        # Scoring calculation - Strictly (0, 1) range enforced (0.01 - 0.99)
-        total_reward_sum = sum(rewards)
-        score = min(max(total_reward_sum, 0.01), 0.99)
+        # Final score: strictly within (0.0, 1.0)
+        if len(rewards) == 0:
+            score = 0.01
+        else:
+            score = sum(rewards)
+        
+        # Strict clamping to (0, 1) — never 0.0, never 1.0
+        score = min(max(score, 0.01), 0.99)
         success = score >= SUCCESS_SCORE_THRESHOLD
         
         log_end(task_id=task_id, success=success, steps=steps_taken, score=score, rewards=rewards)

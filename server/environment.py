@@ -8,11 +8,21 @@ class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
     """
     Core implementation of the SRE Incident Response OpenEnv environment.
     Handles episode lifecycle, action execution, and deterministic reward shaping.
+    
+    IMPORTANT: The OpenEnv HTTP framework creates a NEW environment instance for
+    every /reset and /step HTTP call. Therefore step() must be self-contained —
+    it auto-initializes state if none exists.
     """
     
     def __init__(self):
         super().__init__()
         self._max_steps = 15
+        self._state: Optional[SREState] = None
+        
+    def _ensure_state(self) -> None:
+        """Auto-initialize state if it doesn't exist (needed for stateless HTTP mode)."""
+        if self._state is None:
+            self.reset("task_easy")  # Default to easy task
         
     def reset(self, task_id: str = "task_easy") -> SREObservation:
         """Called to start a new episode for a given task"""
@@ -36,12 +46,15 @@ class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
             dependency_graph=incident["dependency_graph"],
             available_runbooks=[RunbookMetadata(**rm) for rm in RUNBOOK_METADATA],
             action_feedback="You have been paged. Investigate the alert.",
-            reward=0.01 # Initial floor reward
+            reward=0.01  # Strictly > 0.0
         )
         return obs
 
     def step(self, action: SREAction) -> SREObservation:
         """Processes agent action and returns next observation and reward"""
+        # Auto-initialize state for stateless HTTP mode
+        self._ensure_state()
+        
         self._state.step_count += 1
         reward = 0.0
         done = False
@@ -130,32 +143,24 @@ class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
             done = True
             action_feedback = "On-call shift ended (max steps reached). Episode terminated."
         
-        # Strictly (0, 1) range enforcement
-        # Initial base reward of 0.01 added on first step
-        # Every step also gets a 0.001 'participation epsilon' to ensure reward > 0
-        actual_step_reward = reward + 0.001 
+        # ============================================================
+        # STRICTLY (0, 1) REWARD ENFORCEMENT
+        # Every single step reward must be > 0.0 and < 1.0.
+        # The hackathon validator checks this on EVERY reward value.
+        # ============================================================
         
-        if self._state.step_count == 1:
-            actual_step_reward += 0.01 # Base participation reward
-            
-        # Cumulative safety - ensure total never exceeds 0.99
-        new_total = self._state.cumulative_reward + actual_step_reward
-        if new_total >= 1.0:
-            actual_step_reward = 0.99 - self._state.cumulative_reward
-            self._state.cumulative_reward = 0.99
-        elif new_total <= 0.0:
-            # Although penalties exist, we never drop below a tiny positive floor 
-            actual_step_reward = 0.01 - self._state.cumulative_reward
-            self._state.cumulative_reward = 0.01
-        else:
-            self._state.cumulative_reward = new_total
+        # Clamp the individual step reward to strictly (0, 1)
+        # Floor: minimum reward is 0.01 (even on penalties)
+        # Ceiling: maximum reward is 0.99 (even on best actions)
+        clamped_reward = min(max(reward + 0.02, 0.01), 0.99)
 
         obs.action_feedback = action_feedback
         obs.done = done
-        obs.reward = actual_step_reward 
+        obs.reward = clamped_reward
         
         return obs
         
     def state(self) -> SREState:
         """Returns the internal state (used by OpenEnv server)"""
+        self._ensure_state()
         return self._state
