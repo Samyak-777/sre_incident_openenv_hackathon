@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Dict, Optional, Any
 from openenv.core.env_server import Action, Observation, State
 
@@ -55,6 +55,9 @@ class SREAction(Action):
     action_type can be: classify_severity, query_logs, fetch_runbook, 
     execute_runbook_step, escalate, draft_status_update, write_postmortem
     """
+    # Override parent's extra='forbid' to accept unexpected LLM fields
+    model_config = ConfigDict(extra="allow", validate_assignment=True, arbitrary_types_allowed=True)
+    
     action_type: str = Field(..., description="Action to perform (e.g., classify_severity, query_logs)")
     
     # Optional parameters based on action_type
@@ -83,6 +86,7 @@ class SREState(State):
     stakeholder_updates: List[str] = Field(default_factory=list)
     postmortem_submitted: Optional[Dict[str, str]] = None
     score_breakdown: Dict[str, float] = Field(default_factory=dict)
+    cumulative_reward: float = 0.0
     
     # To prevent loops
     action_history: List[str] = Field(default_factory=list)

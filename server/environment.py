@@ -4,44 +4,65 @@ from server.models import SREAction, SREObservation, SREState, IncidentAlert, Lo
 from server.data import INCIDENTS, RUNBOOKS, RUNBOOK_METADATA
 from server.rewards import RewardEngine
 
+# ============================================================
+# MODULE-LEVEL STATE PERSISTENCE
+# The OpenEnv HTTP framework creates a NEW environment instance
+# for every /reset and /step HTTP call. We use a module-level
+# dictionary to persist the episode state across calls within
+# the same process. This enables proper cumulative reward
+# tracking, anti-loop checks, and episode continuity.
+# ============================================================
+_SHARED_STATE: Optional[SREState] = None
+
+
 class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
     """
     Core implementation of the SRE Incident Response OpenEnv environment.
     Handles episode lifecycle, action execution, and deterministic reward shaping.
     
-    IMPORTANT: The OpenEnv HTTP framework creates a NEW environment instance for
-    every /reset and /step HTTP call. Therefore step() must be self-contained —
-    it auto-initializes state if none exists.
+    All per-step rewards are in (0, 1) and the CUMULATIVE episode reward
+    is tracked and capped at 0.95 to ensure it never reaches 1.0.
     """
+    
+    MAX_STEPS = 15
+    # Max cumulative reward per episode — strictly < 1.0
+    MAX_CUMULATIVE = 0.95
     
     def __init__(self):
         super().__init__()
-        self._max_steps = 15
         self._state: Optional[SREState] = None
         
     def _ensure_state(self) -> None:
-        """Auto-initialize state if it doesn't exist (needed for stateless HTTP mode)."""
-        if self._state is None:
-            self.reset("task_easy")  # Default to easy task
+        """Auto-initialize state from shared global or fresh reset."""
+        global _SHARED_STATE
+        if _SHARED_STATE is not None:
+            self._state = _SHARED_STATE
+        elif self._state is None:
+            self.reset("task_easy")
         
     def reset(self, task_id: str = "task_easy") -> SREObservation:
-        """Called to start a new episode for a given task"""
+        """Called to start a new episode for a given task."""
+        global _SHARED_STATE
+        
         if task_id not in INCIDENTS:
-            raise ValueError(f"Unknown task_id: {task_id}")
+            task_id = "task_easy"  # Fallback instead of crash
             
         incident = INCIDENTS[task_id]
         
         # Initialize internal episode state
         self._state = SREState(
             task_id=task_id,
-            current_service=incident["alert"]["service"]
+            current_service=incident["alert"]["service"],
+            cumulative_reward=0.0
         )
         
-        # Initial Observation - the "page" the agent receives
+        # Persist to shared global
+        _SHARED_STATE = self._state
+        
+        # Initial Observation
         obs = SREObservation(
             task_id=task_id,
             alert=IncidentAlert(**incident["alert"]),
-            # Initial metrics for all services visible on dashboard
             metrics={s: MetricSnapshot(**m) for s, m in incident["metrics"].items()},
             dependency_graph=incident["dependency_graph"],
             available_runbooks=[RunbookMetadata(**rm) for rm in RUNBOOK_METADATA],
@@ -51,12 +72,14 @@ class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
         return obs
 
     def step(self, action: SREAction) -> SREObservation:
-        """Processes agent action and returns next observation and reward"""
-        # Auto-initialize state for stateless HTTP mode
+        """Processes agent action and returns next observation with reward."""
+        global _SHARED_STATE
+        
+        # Retrieve persisted state
         self._ensure_state()
         
         self._state.step_count += 1
-        reward = 0.0
+        raw_reward = 0.0
         done = False
         action_feedback = ""
         
@@ -64,13 +87,13 @@ class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
         gt = incident["ground_truth"]
         
         # Anti-loop check
-        action_sig = f"{action.action_type}_{action.service}_{action.step_id}_{action.level}"
+        action_sig = f"{action.action_type}|{action.service}|{action.step_id}|{action.level}"
         if action_sig in self._state.action_history:
-            reward += RewardEngine.PENALTY_WRONG_ACTION
+            raw_reward += RewardEngine.PENALTY_WRONG_ACTION
             action_feedback = f"Penalty: Repeated action '{action.action_type}'"
         self._state.action_history.append(action_sig)
         
-        # Start building next observation (persisting static data)
+        # Build next observation (static data from incident)
         obs = SREObservation(
             task_id=self._state.task_id,
             alert=IncidentAlert(**incident["alert"]),
@@ -79,10 +102,10 @@ class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
             available_runbooks=[RunbookMetadata(**rm) for rm in RUNBOOK_METADATA]
         )
         
-        # Action Switch
+        # ---- Action dispatch ----
         if action.action_type == "classify_severity":
             r = RewardEngine.score_severity(action.level, gt["severity"])
-            reward += r
+            raw_reward += r
             self._state.classified_severity = action.level
             action_feedback = f"Severity classified as {action.level}."
             
@@ -103,64 +126,82 @@ class SREIncidentEnvironment(Environment[SREAction, SREObservation, SREState]):
                 
         elif action.action_type == "execute_runbook_step":
             if action.step_id in gt["required_steps"] and action.step_id not in self._state.runbook_steps_completed:
-                r = RewardEngine.REWARD_RUNBOOK_STEP
+                raw_reward += RewardEngine.REWARD_RUNBOOK_STEP
                 self._state.runbook_steps_completed.append(action.step_id)
-                reward += r
                 action_feedback = f"Successfully executed {action.step_id}"
             else:
-                reward += RewardEngine.PENALTY_WRONG_ACTION
+                raw_reward += RewardEngine.PENALTY_WRONG_ACTION
                 action_feedback = f"Step {action.step_id} executed, but was incorrect or out of sequence."
                 
         elif action.action_type == "escalate":
             if gt.get("required_escalation") == action.team:
-                reward += RewardEngine.REWARD_ROOT_CAUSE
+                raw_reward += RewardEngine.REWARD_ROOT_CAUSE
                 self._state.escalated_team = action.team
                 action_feedback = f"Successfully escalated to {action.team}."
             else:
-                reward += RewardEngine.PENALTY_WRONG_ACTION
+                raw_reward += RewardEngine.PENALTY_WRONG_ACTION
                 action_feedback = f"Escalated to {action.team}, but they rejected the page as unactionable."
                 
         elif action.action_type == "draft_status_update":
             r = RewardEngine.score_comms_quality(action.message, gt)
-            reward += r
-            self._state.stakeholder_updates.append(action.message)
+            raw_reward += r
+            self._state.stakeholder_updates.append(action.message or "")
             action_feedback = "Status update published."
             
         elif action.action_type == "write_postmortem":
             r = RewardEngine.score_postmortem(action.postmortem_fields, gt)
-            reward += r
+            raw_reward += r
             self._state.postmortem_submitted = action.postmortem_fields
             action_feedback = "Postmortem submitted. Episode complete."
             done = True
             self._state.resolved = True
             
         else:
-            reward += RewardEngine.PENALTY_WRONG_ACTION
+            raw_reward += RewardEngine.PENALTY_WRONG_ACTION
             action_feedback = f"Unknown action: {action.action_type}"
             
         # Check timeout
-        if self._state.step_count >= self._max_steps:
+        if self._state.step_count >= self.MAX_STEPS:
             done = True
             action_feedback = "On-call shift ended (max steps reached). Episode terminated."
         
         # ============================================================
-        # STRICTLY (0, 1) REWARD ENFORCEMENT
-        # Every single step reward must be > 0.0 and < 1.0.
-        # The hackathon validator checks this on EVERY reward value.
+        # REWARD CLAMPING: Strictly (0, 1)
+        # 1. Clamp per-step reward: floor 0.01, ceiling 0.06
+        #    (0.06 * 15 steps = 0.90 max, safely < 1.0)
+        # 2. Track cumulative and cap at MAX_CUMULATIVE (0.95)
         # ============================================================
         
-        # Clamp the individual step reward to strictly (0, 1)
-        # Floor: minimum reward is 0.01 (even on penalties)
-        # Ceiling: maximum reward is 0.99 (even on best actions)
-        clamped_reward = min(max(reward + 0.02, 0.01), 0.99)
-
+        # Per-step: clamp to [0.01, 0.06]
+        # This ensures even 15 maximum-reward steps sum to 0.90
+        step_reward = min(max(raw_reward + 0.01, 0.01), 0.06)
+        
+        # Track cumulative
+        new_cumulative = self._state.cumulative_reward + step_reward
+        if new_cumulative >= self.MAX_CUMULATIVE:
+            # Cap the step reward so cumulative stays under MAX_CUMULATIVE
+            step_reward = max(self.MAX_CUMULATIVE - self._state.cumulative_reward - 0.001, 0.01)
+            new_cumulative = self._state.cumulative_reward + step_reward
+        
+        self._state.cumulative_reward = new_cumulative
+        
+        # Persist state
+        _SHARED_STATE = self._state
+        
+        # Final safety: ensure step_reward is strictly (0, 1)
+        step_reward = min(max(step_reward, 0.01), 0.99)
+        
         obs.action_feedback = action_feedback
         obs.done = done
-        obs.reward = clamped_reward
+        obs.reward = step_reward
+        
+        # If episode ends, clear shared state for next episode
+        if done:
+            _SHARED_STATE = None
         
         return obs
         
     def state(self) -> SREState:
-        """Returns the internal state (used by OpenEnv server)"""
+        """Returns the internal state (used by OpenEnv server)."""
         self._ensure_state()
         return self._state
