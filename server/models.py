@@ -58,7 +58,7 @@ class SREAction(Action):
     # Override parent's extra='forbid' to accept unexpected LLM fields
     model_config = ConfigDict(extra="allow", validate_assignment=True, arbitrary_types_allowed=True)
     
-    action_type: str = Field(..., description="Action to perform (e.g., classify_severity, query_logs)")
+    action_type: str = Field(default="noop", description="Action to perform (e.g., classify_severity, query_logs)")
     
     # Optional parameters based on action_type
     level: Optional[str] = Field(None, description="P1/P2/P3/P4 for classify_severity")
