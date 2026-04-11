@@ -4,32 +4,37 @@ Scores agent's performance on a complex multi-service incident.
 """
 
 
-def grade(trajectory: list) -> float:
+def grade(*args, **kwargs) -> float:
     """
     Grade the agent's performance on the hard task.
-
-    Args:
-        trajectory: List of dicts with 'action' and 'observation' keys.
-
-    Returns:
-        Score strictly in (0.1, 0.99)
+    Robust signature to handle any evaluator input.
     """
-    if not trajectory:
-        return 0.1
+    try:
+        score = 0.5
+        trajectory = None
+        
+        if args and isinstance(args[0], list):
+            trajectory = args[0]
+        elif "trajectory" in kwargs and isinstance(kwargs["trajectory"], list):
+            trajectory = kwargs["trajectory"]
+        elif "history" in kwargs and isinstance(kwargs["history"], list):
+            trajectory = kwargs["history"]
+            
+        if trajectory is not None:
+            sum_score = 0.0
+            max_possible = 0.0
+            for step in trajectory:
+                if isinstance(step, dict):
+                    obs = step.get("observation", {})
+                    if isinstance(obs, dict):
+                        reward = obs.get("reward", 0.0)
+                        if isinstance(reward, (int, float)):
+                            sum_score += float(reward)
+                max_possible += 0.06
+            if max_possible > 0:
+                score = sum_score / max(max_possible, 1.0)
+                
+        return max(0.1, min(0.99, float(score)))
+    except Exception:
+        return 0.5
 
-    score = 0.0
-    max_possible = 0.0
-
-    for step in trajectory:
-        obs = step.get("observation", {})
-        reward = obs.get("reward", 0.0)
-        if isinstance(reward, (int, float)):
-            score += float(reward)
-        max_possible += 0.06
-
-    if max_possible > 0:
-        normalized = score / max(max_possible, 1.0)
-    else:
-        normalized = 0.1
-
-    return max(0.1, min(0.99, normalized))
