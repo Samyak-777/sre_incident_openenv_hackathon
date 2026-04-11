@@ -48,12 +48,10 @@ def log_step(step, action_str, reward, done, error=None):
     err = str(error) if error else "null"
     print(f"[STEP] step={step} action={action_str} reward={fmt_r(reward)} done={fmt_b(done)} error={err}", flush=True)
 
-def log_end(task_id, success, steps, task_score, rewards):
-    """[END] line with BOTH task_score and rewards fields."""
+def log_end(success, steps, rewards):
+    """[END] line — EXACTLY matching guidelines format."""
     rewards_str = ",".join(fmt_r(r) for r in rewards) if rewards else fmt_r(0.01)
-    # Clamp task_score to strict (0, 1)
-    ts = clamp(task_score)
-    print(f"[END] task={task_id} task_score={ts:.2f} success={fmt_b(success)} steps={steps} rewards={rewards_str}", flush=True)
+    print(f"[END] success={fmt_b(success)} steps={steps} rewards={rewards_str}", flush=True)
 
 
 def run_inference():
@@ -72,7 +70,7 @@ def run_inference():
         except Exception as e:
             log_step(1, "reset_failed", 0.01, True, error=str(e))
             rewards.append(0.01)
-            log_end(task_id, success=False, steps=0, task_score=0.01, rewards=rewards)
+            log_end(success=False, steps=0, rewards=rewards)
             continue
         
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -127,7 +125,7 @@ def run_inference():
         task_score = clamp(sum(rewards))
         success = task_score > 0.10
         
-        log_end(task_id, success=success, steps=steps_taken, task_score=task_score, rewards=rewards)
+        log_end(success=success, steps=steps_taken, rewards=rewards)
 
 
 if __name__ == "__main__":
