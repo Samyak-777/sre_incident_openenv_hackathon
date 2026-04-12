@@ -4,7 +4,7 @@ Scores agent's performance on a complex multi-service incident.
 """
 
 
-def grade(trajectory: list = None, *args, **kwargs) -> float:
+def grade(trajectory: dict = None, *args, **kwargs) -> float:
     """
     Grade the agent's performance on the hard task.
     Robust signature to handle any evaluator input.

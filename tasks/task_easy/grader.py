@@ -7,7 +7,7 @@ from the episode and returns a score strictly in (0, 1).
 """
 
 
-def grade(trajectory: list = None, *args, **kwargs) -> float:
+def grade(trajectory: dict = None, *args, **kwargs) -> float:
     """
     Grade the agent's performance on the easy task.
     Robust signature to handle any evaluator input (State, trajectory list, etc.).
