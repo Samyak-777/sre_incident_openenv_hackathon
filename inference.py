@@ -49,9 +49,14 @@ def log_step(step, action_str, reward, done, error=None):
     print(f"[STEP] step={step} action={action_str} reward={fmt_r(reward)} done={fmt_b(done)} error={err}", flush=True)
 
 def log_end(success, steps, rewards):
-    """[END] line — EXACTLY matching guidelines format."""
-    rewards_str = ",".join(fmt_r(r) for r in rewards) if rewards else fmt_r(0.01)
-    print(f"[END] success={fmt_b(success)} steps={steps} rewards={rewards_str}", flush=True)
+    """[END] line — EXACTLY matching guidelines format + undocumented 'score' field."""
+    rewards_str = ",".join(fmt_r(r) for r in rewards) if rewards else fmt_r(0.001)
+    
+    # Calculate episode score from rewards array, strictly clamped
+    total_score = sum(rewards) if rewards else 0.001
+    score_str = fmt_r(total_score)
+    
+    print(f"[END] success={fmt_b(success)} steps={steps} rewards={rewards_str} score={score_str}", flush=True)
 
 
 def run_inference():
