@@ -31,11 +31,11 @@ Example: {"action_type": "query_logs", "service": "auth-service"}
 
 def clamp(v):
     """Clamp to strictly (0, 1) — never 0.0 or 1.0."""
-    return min(max(float(v) if v is not None else 0.01, 0.01), 0.99)
+    return min(max(float(v) if v is not None else 0.001, 0.001), 0.999)
 
 def fmt_r(v):
-    """Format reward to 2 decimal places, clamped."""
-    return f"{clamp(v):.2f}"
+    """Format reward to 3 decimal places to prevent exact 1.0 or 0.0 rendering."""
+    return f"{clamp(v):.3f}"
 
 def fmt_b(b):
     """Format boolean as lowercase true/false."""
@@ -55,7 +55,11 @@ def log_end(success, steps, rewards):
 
 
 def run_inference():
-    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+    # To satisfy OpenAI python library requirement for api_key environment variable
+    # without explicitly defining the key via `api_key=` (prevents LiteLLM proxy error).
+    if "OPENAI_API_KEY" not in os.environ:
+        os.environ["OPENAI_API_KEY"] = HF_TOKEN if HF_TOKEN else "dummy-key"
+    client = OpenAI(base_url=API_BASE_URL)
     tasks = ["task_easy", "task_medium", "task_hard"]
     
     for task_id in tasks:
