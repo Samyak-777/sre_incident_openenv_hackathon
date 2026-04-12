@@ -30,12 +30,12 @@ Example: {"action_type": "query_logs", "service": "auth-service"}
 # ============================================================
 
 def clamp(v):
-    """Clamp to strictly (0, 1) — never 0.0 or 1.0. Safe margin based on community insights."""
-    return min(max(float(v) if v is not None else 0.05, 0.05), 0.95)
+    """Clamp to strictly (0, 1) — never 0.0 or 1.0."""
+    return min(max(float(v) if v is not None else 0.001, 0.001), 0.999)
 
 def fmt_r(v):
-    """Format reward to 2 decimal places to match 0.05 safety bounds."""
-    return f"{clamp(v):.2f}"
+    """Format reward to 3 decimal places to prevent exact 1.0 or 0.0 rendering."""
+    return f"{clamp(v):.3f}"
 
 def fmt_b(b):
     """Format boolean as lowercase true/false."""

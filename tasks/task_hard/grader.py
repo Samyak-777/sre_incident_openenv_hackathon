@@ -4,7 +4,7 @@ Scores agent's performance on a complex multi-service incident.
 """
 
 
-def grade(*args, **kwargs) -> float:
+def grade(trajectory: list = None, *args, **kwargs) -> float:
     """
     Grade the agent's performance on the hard task.
     Robust signature to handle any evaluator input.
@@ -34,7 +34,7 @@ def grade(*args, **kwargs) -> float:
             if max_possible > 0:
                 score = sum_score / max(max_possible, 1.0)
                 
-        return max(0.05, min(float(score), 0.95))
+        return max(0.001, min(float(score), 0.999))
     except Exception:
         return 0.5
 

@@ -1,5 +1,6 @@
 README.md
 pyproject.toml
+server/__init__.py
 server/app.py
 server/data.py
 server/environment.py
@@ -11,3 +12,10 @@ sre_incident_env_hackathon.egg-info/dependency_links.txt
 sre_incident_env_hackathon.egg-info/entry_points.txt
 sre_incident_env_hackathon.egg-info/requires.txt
 sre_incident_env_hackathon.egg-info/top_level.txt
+tasks/__init__.py
+tasks/task_easy/__init__.py
+tasks/task_easy/grader.py
+tasks/task_hard/__init__.py
+tasks/task_hard/grader.py
+tasks/task_medium/__init__.py
+tasks/task_medium/grader.py
