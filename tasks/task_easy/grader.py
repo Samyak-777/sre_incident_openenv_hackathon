@@ -37,7 +37,7 @@ def grade(*args, **kwargs) -> float:
             if max_possible > 0:
                 score = sum_score / max(max_possible, 1.0)
                 
-        return max(0.001, min(float(score), 0.999))
+        return max(0.05, min(float(score), 0.95))
     except Exception:
         # Fallback safe score precisely within (0, 1) boundaries to avoid Task Validation failure
         return 0.5
